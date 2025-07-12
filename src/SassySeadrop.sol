@@ -2,25 +2,39 @@
 pragma solidity ^0.8.17;
 
 import {ERC721SeaDrop} from "./ERC721SeaDrop.sol";
+import {SassyShreddersErrorsAndEvents} from "./SassyErrorsAndEvents.sol";
+import {ERC721ContractMetadata} from "./ERC721ContractMetadata.sol";
+import {ISeaDropTokenContractMetadata} from "./interfaces/ISeaDropTokenContractMetadata.sol";
+import {IERC20} from "openzeppelin-contracts/interfaces/IERC20.sol";
+import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
 
-contract Sassy is ERC721SeaDrop {
+contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
+    using ECDSA for bytes32;
 
     // Revealed tokens, and their rarities
     mapping (uint256 => uint8) private revealedTokenIdRarityMapping;
 
     // TODO: Make these dynamic
-    string constant private UNREVEALED_NFT_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i";
-    string constant private REVEALED_NFT_BASE_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafybeig3fy55suqgc6d77melvbhwnqhhtrgzjffnbj7wkce6vlqelxfctu/";
-    string constant private CONTRACT_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreiedauzkaleiicy5dq7b5rgifw5xlyae5ig6zjt7h2pzcljo27fb2q";
+    string private UNREVEALED_NFT_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i";
+    string private REVEALED_NFT_BASE_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafybeig3fy55suqgc6d77melvbhwnqhhtrgzjffnbj7wkce6vlqelxfctu/";
+    // string private CONTRACT_METADATA_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreiedauzkaleiicy5dq7b5rgifw5xlyae5ig6zjt7h2pzcljo27fb2q";
 
     bool private REVEAL_PHASE_ACTIVE = false;
+    address immutable private USDC_CONTRACT_ADDRESS;
 
-    constructor(string memory _name, string memory _symbol, address[] memory _allowedSeadrop) 
+    address private RARITY_ASSIGNER_ADDRESS;
+
+    uint256 constant BURN_FEE = 10_000_000; // 10 USDC
+
+    constructor(string memory _name, string memory _symbol, address[] memory _allowedSeadrop, address _usdcContractAddress) 
     ERC721SeaDrop(
         _name,
         _symbol,
         _allowedSeadrop
-    ) {}
+    ) {
+        USDC_CONTRACT_ADDRESS = _usdcContractAddress;
+        RARITY_ASSIGNER_ADDRESS = msg.sender;
+    }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         if (REVEAL_PHASE_ACTIVE) {
@@ -33,25 +47,73 @@ contract Sassy is ERC721SeaDrop {
         return UNREVEALED_NFT_URI;
     }
 
-    function revealNftNoSignature(uint256 tokenId, uint8 rarity) public {
-        require(
-            bytes(REVEALED_NFT_BASE_URI).length > 0,
-            "Revealed NFT Base URI not set, can't mint currently"
-        );
-        require(REVEAL_PHASE_ACTIVE, "Reveal phase hasn't started");
+    function revealNft(uint256 tokenId, uint8 rarity, bytes calldata signature) public {
+        if (bytes(REVEALED_NFT_BASE_URI).length == 0) revert RevealBaseURINotSet();
+        if (!REVEAL_PHASE_ACTIVE) revert RevealPhaseNotActive();
         if (!_exists(tokenId)) revert OwnerQueryForNonexistentToken();
-        require(rarity <= 11 && rarity > 0, "Rarity should be between 1 to 11.");
-        require(
-            ownerOf(tokenId) == msg.sender,
-            "Only NFT Owner can reveal token"
+        if (rarity >= 11 || rarity < 1) revert InvalidRarity(rarity);
+        if(ownerOf(tokenId) != msg.sender) revert NotTokenOwner(tokenId);
+        if (revealedTokenIdRarityMapping[tokenId] == 0) revert RarityAlreadyRevealed(
+            tokenId, revealedTokenIdRarityMapping[tokenId]
         );
-        require(
-            revealedTokenIdRarityMapping[tokenId] == 0,
-            "Already revealed token"
-        );
+        if (verifySignature(tokenId, rarity, signature)) revert InvalidECDSASignature();
+
+        // All Checks passed, ready to mint
         revealedTokenIdRarityMapping[tokenId] = rarity;
+        emit TokenRevealed(tokenId, rarity);
     }
 
+    function verifySignature(
+        uint256 tokenId,
+        uint8 rarity,
+        bytes calldata signature
+    ) public view returns (bool) {
+        bytes32 objectHash = keccak256(
+            abi.encodePacked(address(this), block.chainid, tokenId, rarity)
+        );
+
+        bytes32 ethSignedObjectHash = ECDSA.toEthSignedMessageHash(
+            objectHash
+        );
+        address signer = ECDSA.recover(ethSignedObjectHash, signature);
+        return signer == RARITY_ASSIGNER_ADDRESS;
+    }
+
+    // The burn fee is 10 USDC regardless of tokenIds count
+    function burnNft(uint256[] calldata tokenIds) external nonReentrant {
+        uint256 tokensToBurnCount = tokenIds.length;
+        if (tokensToBurnCount < 1 || tokensToBurnCount > 10) revert InvalidBurnCount(tokensToBurnCount);
+        uint256 usdcSpendingAllowance = IERC20(USDC_CONTRACT_ADDRESS).allowance(
+            msg.sender,
+            address(this)
+        );
+
+        if (usdcSpendingAllowance < BURN_FEE) revert InsufficientUSDCApproval(
+            msg.sender,
+            usdcSpendingAllowance
+        );
+
+        bool burnFeeSuccessfullyPaid = IERC20(USDC_CONTRACT_ADDRESS).transferFrom(
+            msg.sender,
+            address(this),
+            BURN_FEE
+        );
+
+        if (!burnFeeSuccessfullyPaid) revert USDCPaymentFailed();
+
+        for (uint256 i = 0; i < tokensToBurnCount; i++) {
+            uint256 tokenId = tokenIds[i];
+            if (!_exists(tokenId)) revert OwnerQueryForNonexistentToken();
+            if(ownerOf(tokenId) != msg.sender) revert NotTokenOwner(tokenId);
+            if (revealedTokenIdRarityMapping[tokenId] == 0) revert RarityNotRevealed(tokenId);
+            _burn(tokenId);
+            delete revealedTokenIdRarityMapping[tokenId];
+        }
+
+        emit TokensBurn(msg.sender, tokenIds);
+    }
+
+    // Helper Function for activating reveal phase
     function toggleRevealPhaseActive() public onlyOwner {
         REVEAL_PHASE_ACTIVE = !REVEAL_PHASE_ACTIVE;
     }
@@ -60,71 +122,38 @@ contract Sassy is ERC721SeaDrop {
         return REVEAL_PHASE_ACTIVE;
     }
 
-    // function revealNft(
-    //     uint16 tokenId,
-    //     uint8 rarity,
-    //     bytes memory _signature
-    // ) public {
-    //     require(
-    //         bytes(NFT_BASE_URI).length > 0,
-    //         "Revealed NFT Base URI not set, can't mint currently"
-    //     );
-    //     require(REVEAL_PHASE, "Reveal phase hasn't started");
-    //     _requireOwned(tokenId);
-    //     require(rarity <= 11 && rarity > 0, "Rarity should be between 1 to 11.");
-    //     require(
-    //         ownerOf(tokenId) == msg.sender,
-    //         "Only NFT Owner can reveal token"
-    //     );
-    //     require(
-    //         tokenUnrevealed[tokenId],
-    //         "Already revealed token"
-    //     );
-    //     require(
-    //         verifySignature(tokenId, rarity, _signature),
-    //         "Invalid Signature"
-    //     );
-    //     _setTokenURI(tokenId, Strings.toString(rarity));
-    //     delete tokenUnrevealed[tokenId];
-    //     emit MetadataUpdate(tokenId); // Notifies Opensea to update the metadata with the revealed data
-    // }
+    // Rarity Assigner Address Helpers
+        function setRarityAssignerAddress(address _newAddress) external onlyOwner {
+        RARITY_ASSIGNER_ADDRESS = _newAddress;
+    }
 
-    // // The burn fee is 10 USDC regardless of tokenIds count
-    // function burnNft(uint16[] memory tokenIds) external nonReentrant {
-    //     uint256 tokensToBurnCount = tokenIds.length;
-    //     require(tokensToBurnCount > 0 && tokensToBurnCount <= 10, "Can only burn 1 - 10 tokens at a time");
-    //     require(
-    //         IERC20(USDC_CONTRACT_ADDRESS).allowance(
-    //             msg.sender,
-    //             address(this)
-    //         ) >= BURN_FEE,
-    //         "Need approval for NFT Collection to spend 10 USDC"
-    //     );
+    function getRarityAssignerAddress() external view returns (address) {
+        return RARITY_ASSIGNER_ADDRESS;
+    }
 
-    //     require(
-    //         IERC20(USDC_CONTRACT_ADDRESS).transferFrom(
-    //             msg.sender,
-    //             address(this),
-    //             BURN_FEE
-    //         ),
-    //         "Burn Fee payment failed"
-    //     );
 
-    //     for (uint256 i = 0; i < tokensToBurnCount; i++) {
-    //         uint16 tokenId = tokenIds[i];
-    //         _requireOwned(tokenId);
-    //         require(
-    //             ownerOf(tokenId) == msg.sender,
-    //             "Only token Owner can burn the NFT"
-    //         );
-    //         require(
-    //             !tokenUnrevealed[tokenId],
-    //             "Cannot burn token before reveal"
-    //         );
-    //         _burn(tokenId);
-    //     }
+    // ================= URI Helpers =================
 
-    //     emit TokensBurn(msg.sender, tokenIds);
-    // }
+    // Set Base URI for revealed assets
+    function setBaseUri(string memory _newUri) external onlyOwner {
+        REVEALED_NFT_BASE_URI = _newUri;
+    }
+
+    function getBaseUri() external view returns (string memory) {
+        return REVEALED_NFT_BASE_URI;
+    }
+
+    // Change URI for unrevealed NFT object
+    function setUnrevealedNftUri(string memory _newUri) external onlyOwner {
+        UNREVEALED_NFT_URI = _newUri;
+    }
+
+    function getUnrevealedNftUri() external view returns (string memory) {
+        return UNREVEALED_NFT_URI;
+    }
+
+    function _baseURI() internal view override returns (string memory) {
+        return REVEALED_NFT_BASE_URI;
+    }
 
 }
