@@ -12,69 +12,61 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     using ECDSA for bytes32;
 
     // Revealed tokens, and their rarities
-    mapping (uint256 => uint8) private revealedTokenIdRarityMapping;
+    mapping(uint256 => uint8) private revealedTokenIdRarityMapping;
 
     // TODO: Make these dynamic
-    string private UNREVEALED_NFT_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i";
-    string private REVEALED_NFT_BASE_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafybeig3fy55suqgc6d77melvbhwnqhhtrgzjffnbj7wkce6vlqelxfctu/";
-    // string private CONTRACT_METADATA_URI = "https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreiedauzkaleiicy5dq7b5rgifw5xlyae5ig6zjt7h2pzcljo27fb2q";
+    string private UNREVEALED_NFT_URI; 
+    string private REVEALED_NFT_BASE_URI;
 
+    // Unrevealed NFT URI = https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i
+    // Revealed Base URI = https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafybeig3fy55suqgc6d77melvbhwnqhhtrgzjffnbj7wkce6vlqelxfctu/
+    // Contract URI = https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreiedauzkaleiicy5dq7b5rgifw5xlyae5ig6zjt7h2pzcljo27fb2q
     bool private REVEAL_PHASE_ACTIVE = false;
-    address immutable private USDC_CONTRACT_ADDRESS;
+    address private immutable USDC_CONTRACT_ADDRESS;
 
     address private RARITY_ASSIGNER_ADDRESS;
 
     uint256 constant BURN_FEE = 10_000_000; // 10 USDC
 
-    constructor(string memory _name, string memory _symbol, address[] memory _allowedSeadrop, address _usdcContractAddress) 
-    ERC721SeaDrop(
-        _name,
-        _symbol,
-        _allowedSeadrop
-    ) {
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        address[] memory _allowedSeadrop,
+        address _usdcContractAddress
+    ) ERC721SeaDrop(_name, _symbol, _allowedSeadrop) {
         USDC_CONTRACT_ADDRESS = _usdcContractAddress;
         RARITY_ASSIGNER_ADDRESS = msg.sender;
     }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        if (REVEAL_PHASE_ACTIVE) {
-            if (revealedTokenIdRarityMapping[tokenId] != 0) {
-                return string(abi.encodePacked(REVEALED_NFT_BASE_URI, _toString(revealedTokenIdRarityMapping[tokenId])));
-            } else {
-                return UNREVEALED_NFT_URI;
-            }
+        if (revealedTokenIdRarityMapping[tokenId] != 0) {
+            return string(abi.encodePacked(REVEALED_NFT_BASE_URI, _toString(revealedTokenIdRarityMapping[tokenId])));
+        } else {
+            return UNREVEALED_NFT_URI;
         }
-        return UNREVEALED_NFT_URI;
     }
 
     function revealNft(uint256 tokenId, uint8 rarity, bytes calldata signature) public {
-        if (bytes(REVEALED_NFT_BASE_URI).length == 0) revert RevealBaseURINotSet();
         if (!REVEAL_PHASE_ACTIVE) revert RevealPhaseNotActive();
+        if (bytes(REVEALED_NFT_BASE_URI).length == 0) revert RevealBaseURINotSet();
         if (!_exists(tokenId)) revert OwnerQueryForNonexistentToken();
-        if (rarity >= 11 || rarity < 1) revert InvalidRarity(rarity);
-        if(ownerOf(tokenId) != msg.sender) revert NotTokenOwner(tokenId);
-        if (revealedTokenIdRarityMapping[tokenId] == 0) revert RarityAlreadyRevealed(
-            tokenId, revealedTokenIdRarityMapping[tokenId]
-        );
-        if (verifySignature(tokenId, rarity, signature)) revert InvalidECDSASignature();
+        if (rarity > 11 || rarity < 1) revert InvalidRarity(rarity);
+        if (ownerOf(tokenId) != msg.sender) revert NotTokenOwner(tokenId);
+        if (revealedTokenIdRarityMapping[tokenId] != 0) {
+            revert RarityAlreadyRevealed(tokenId, revealedTokenIdRarityMapping[tokenId]);
+        }
+        if (!verifySignature(tokenId, rarity, signature)) revert InvalidECDSASignature();
 
-        // All Checks passed, ready to mint
+        // All Checks passed, ready to reveal
         revealedTokenIdRarityMapping[tokenId] = rarity;
         emit TokenRevealed(tokenId, rarity);
+        emit BatchMetadataUpdate(tokenId, tokenId);
     }
 
-    function verifySignature(
-        uint256 tokenId,
-        uint8 rarity,
-        bytes calldata signature
-    ) public view returns (bool) {
-        bytes32 objectHash = keccak256(
-            abi.encodePacked(address(this), block.chainid, tokenId, rarity)
-        );
+    function verifySignature(uint256 tokenId, uint8 rarity, bytes calldata signature) public view returns (bool) {
+        bytes32 objectHash = keccak256(abi.encodePacked(address(this), block.chainid, tokenId, rarity));
 
-        bytes32 ethSignedObjectHash = ECDSA.toEthSignedMessageHash(
-            objectHash
-        );
+        bytes32 ethSignedObjectHash = ECDSA.toEthSignedMessageHash(objectHash);
         address signer = ECDSA.recover(ethSignedObjectHash, signature);
         return signer == RARITY_ASSIGNER_ADDRESS;
     }
@@ -83,34 +75,24 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     function burnNft(uint256[] calldata tokenIds) external nonReentrant {
         uint256 tokensToBurnCount = tokenIds.length;
         if (tokensToBurnCount < 1 || tokensToBurnCount > 10) revert InvalidBurnCount(tokensToBurnCount);
-        uint256 usdcSpendingAllowance = IERC20(USDC_CONTRACT_ADDRESS).allowance(
-            msg.sender,
-            address(this)
-        );
+        uint256 usdcSpendingAllowance = IERC20(USDC_CONTRACT_ADDRESS).allowance(msg.sender, address(this));
 
-        if (usdcSpendingAllowance < BURN_FEE) revert InsufficientUSDCApproval(
-            msg.sender,
-            usdcSpendingAllowance
-        );
+        if (usdcSpendingAllowance < BURN_FEE) revert InsufficientUSDCApproval(msg.sender, usdcSpendingAllowance);
 
-        bool burnFeeSuccessfullyPaid = IERC20(USDC_CONTRACT_ADDRESS).transferFrom(
-            msg.sender,
-            address(this),
-            BURN_FEE
-        );
+        bool burnFeeSuccessfullyPaid = IERC20(USDC_CONTRACT_ADDRESS).transferFrom(msg.sender, address(this), BURN_FEE);
 
         if (!burnFeeSuccessfullyPaid) revert USDCPaymentFailed();
 
         for (uint256 i = 0; i < tokensToBurnCount; i++) {
             uint256 tokenId = tokenIds[i];
             if (!_exists(tokenId)) revert OwnerQueryForNonexistentToken();
-            if(ownerOf(tokenId) != msg.sender) revert NotTokenOwner(tokenId);
+            if (ownerOf(tokenId) != msg.sender) revert NotTokenOwner(tokenId);
             if (revealedTokenIdRarityMapping[tokenId] == 0) revert RarityNotRevealed(tokenId);
             _burn(tokenId);
             delete revealedTokenIdRarityMapping[tokenId];
         }
 
-        emit TokensBurn(msg.sender, tokenIds);
+        emit TokensBurned(msg.sender, tokenIds);
     }
 
     // Helper Function for activating reveal phase
@@ -118,19 +100,18 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
         REVEAL_PHASE_ACTIVE = !REVEAL_PHASE_ACTIVE;
     }
 
-    function getRevealPhaseActiveStatus()  public view returns (bool) {
+    function getRevealPhaseActiveStatus() public view returns (bool) {
         return REVEAL_PHASE_ACTIVE;
     }
 
     // Rarity Assigner Address Helpers
-        function setRarityAssignerAddress(address _newAddress) external onlyOwner {
+    function setRarityAssignerAddress(address _newAddress) external onlyOwner {
         RARITY_ASSIGNER_ADDRESS = _newAddress;
     }
 
     function getRarityAssignerAddress() external view returns (address) {
         return RARITY_ASSIGNER_ADDRESS;
     }
-
 
     // ================= URI Helpers =================
 
@@ -156,4 +137,8 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
         return REVEALED_NFT_BASE_URI;
     }
 
+    // Rarity Helpers
+    function getRarityForTokenId(uint256 tokenId) public view returns (uint8) {
+        return revealedTokenIdRarityMapping[tokenId];
+    }
 }
