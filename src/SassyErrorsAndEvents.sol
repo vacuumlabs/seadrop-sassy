@@ -19,6 +19,6 @@ interface SassyShreddersErrorsAndEvents {
     error InsufficientUSDCApproval(address userAddress, uint256 amount);
     error USDCPaymentFailed();
 
-    event TokensBurned(address userAddress, uint256[] tokenIds);
-    event TokenRevealed(uint256 tokenId, uint8 rarity);
+    event TokensBurned(address indexed userAddress, uint256[] tokenIds);
+    event TokenRevealed(uint256 indexed tokenId, uint8 indexed rarity);
 }

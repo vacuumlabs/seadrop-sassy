@@ -141,4 +141,36 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     function getRarityForTokenId(uint256 tokenId) public view returns (uint8) {
         return revealedTokenIdRarityMapping[tokenId];
     }
+
+    // =================== WITHDRAW FUNCTIONS ===================
+
+    // Owner can withdraw USDC from the contract via this function
+    function withdrawUSDC() external onlyOwner nonReentrant {
+        uint256 allUSDC = IERC20(USDC_CONTRACT_ADDRESS).balanceOf(
+            address(this)
+        );
+        IERC20(USDC_CONTRACT_ADDRESS).transfer(msg.sender, allUSDC);
+    }
+
+    // Withdraw ETH Sent to this contract
+    function withdrawEth() external onlyOwner nonReentrant {
+        (bool success, ) = payable(owner()).call{value: address(this).balance}(
+            ""
+        );
+        require(success, "Failed to withdraw ETH");
+    }
+
+    // Withdraw any other ERC20 tokens (apart from USDC) sent to contract accidentally
+    function withdrawErc20(
+        address _tokenAddress
+    ) external onlyOwner nonReentrant {
+        require(
+            _tokenAddress != USDC_CONTRACT_ADDRESS,
+            "Cannot withdraw USDC from this function"
+        );
+        uint256 allTokens = IERC20(_tokenAddress).balanceOf(address(this));
+        IERC20(_tokenAddress).transfer(msg.sender, allTokens);
+    }
+
+    receive() external payable {}
 }
