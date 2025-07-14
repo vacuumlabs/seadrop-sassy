@@ -16,7 +16,7 @@ contract DeploySassy is Script {
     address creator = 0x26faf8AE18d15Ed1CA0563727Ad6D4Aa02fb2F80;
     address feeRecipient = 0x0000a26b00c1F0DF003000390027140000fAa719;
 
-    address constant USDC_CONTRACT_ADDRESS = vm.envAddress("USDC_ADDRESS");
+    address USDC_CONTRACT_ADDRESS = vm.envAddress("USDC_ADDRESS");
 
     // Token config
     uint256 maxSupply = 5050;
