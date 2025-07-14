@@ -1,4 +1,5 @@
 pragma solidity ^0.8.17;
+
 import {TestHelper} from "../utils/TestHelper.sol";
 import {console} from "forge-std/console.sol";
 import "openzeppelin-contracts/utils/Strings.sol";
@@ -6,7 +7,7 @@ import {Sassy} from "../../../src/SassySeadrop.sol";
 import {SassyShreddersErrorsAndEvents} from "../../../src/SassyErrorsAndEvents.sol";
 import {SeaDrop} from "../../../src/SeaDrop.sol";
 import {ISeaDrop} from "../../../src/interfaces/ISeaDrop.sol";
-import { PublicDrop } from "../../../src/lib/SeaDropStructs.sol";
+import {PublicDrop} from "../../../src/lib/SeaDropStructs.sol";
 import {ERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {IERC721A} from "ERC721A/IERC721A.sol";
 
@@ -15,15 +16,15 @@ contract USDC is ERC20 {
     constructor() ERC20("USDC", "USDC") {
         _mint(msg.sender, 1000 * 1000 * 1000000); // 1k USDC with 6 decimals
     }
-    
-    function decimals() public pure override returns(uint8) {
+
+    function decimals() public pure override returns (uint8) {
         return 6;
     }
 }
 
 contract BurnNftTest is TestHelper {
     using Strings for string;
-    
+
     Sassy nftContract;
     USDC usdc;
     address feeRecipient = 0x0000a26b00c1F0DF003000390027140000fAa719;
@@ -38,11 +39,11 @@ contract BurnNftTest is TestHelper {
     uint16 feeBps = 300; // 3% Secondary Sale Fee
     uint80 mintPrice = 0.0001 ether;
     uint16 maxTotalMintableByWallet = 3;
-    
+
     function setUp() public {
         address[] memory allowedSeadrop = new address[](1);
         allowedSeadrop[0] = address(seadrop);
-        
+
         // Deploy contract
         vm.startPrank(user1);
         vm.deal(user1, 100 ether);
@@ -52,26 +53,26 @@ contract BurnNftTest is TestHelper {
         vm.deal(address(nftContract), 100 ether);
         vm.stopPrank();
     }
-    
+
     function test_onlyOwnerCanWithdraw() public {
         // First, let's check who the owner is
         console.log("Contract owner:", nftContract.owner());
         console.log("User1:", user1);
         console.log("User2:", user2);
-        
+
         // Get the actual owner address
         address actualOwner = nftContract.owner();
-        
+
         // USDC Transfer - use direct transfer since user1 has the tokens
         vm.startPrank(user1);
         usdc.transfer(address(nftContract), 50_000_000);
         console.log("USDC balance after transfer:", usdc.balanceOf(address(nftContract)));
-        
+
         // Send some ETH to the contract
         vm.deal(address(nftContract), 1 ether);
         console.log("Contract ETH balance:", address(nftContract).balance);
         vm.stopPrank();
-        
+
         // Withdraw fails for non-owner
         vm.startPrank(user2);
         vm.expectRevert(abi.encodeWithSignature("OnlyOwner()"));
@@ -79,43 +80,43 @@ contract BurnNftTest is TestHelper {
         vm.expectRevert(abi.encodeWithSignature("OnlyOwner()"));
         nftContract.withdrawEth();
         vm.stopPrank();
-        
+
         // Owner withdraws successfully - use actual owner
         vm.startPrank(actualOwner);
         uint256 usdcBalanceBefore = usdc.balanceOf(actualOwner);
         uint256 ethBalanceBefore = actualOwner.balance;
-        
+
         nftContract.withdrawUSDC();
         nftContract.withdrawEth();
-        
+
         // Verify withdrawals worked
         assertGt(usdc.balanceOf(actualOwner), usdcBalanceBefore, "USDC should be withdrawn");
         assertGt(actualOwner.balance, ethBalanceBefore, "ETH should be withdrawn");
-        
+
         // Add more funds for the new owner to withdraw
         vm.startPrank(user1);
         usdc.transfer(address(nftContract), 25_000_000);
         vm.deal(address(nftContract), 0.5 ether);
         vm.stopPrank();
-        
+
         // Owner changes
         vm.startPrank(actualOwner);
         nftContract.transferOwnership(user2);
         vm.stopPrank();
-        
+
         // New owner can withdraw
         vm.startPrank(user2);
         nftContract.acceptOwnership();
         uint256 user2UsdcBefore = usdc.balanceOf(user2);
         uint256 user2EthBefore = user2.balance;
-        
+
         nftContract.withdrawUSDC();
         nftContract.withdrawEth();
-        
+
         // Verify new owner can withdraw
         assertGt(usdc.balanceOf(user2), user2UsdcBefore, "New owner should be able to withdraw USDC");
         assertGt(user2.balance, user2EthBefore, "New owner should be able to withdraw ETH");
-        
+
         vm.stopPrank();
     }
 }

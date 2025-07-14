@@ -15,7 +15,7 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     mapping(uint256 => uint8) private revealedTokenIdRarityMapping;
 
     // TODO: Make these dynamic
-    string private UNREVEALED_NFT_URI; 
+    string private UNREVEALED_NFT_URI;
     string private REVEALED_NFT_BASE_URI;
 
     // Unrevealed NFT URI = https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i
@@ -146,28 +146,19 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
 
     // Owner can withdraw USDC from the contract via this function
     function withdrawUSDC() external onlyOwner nonReentrant {
-        uint256 allUSDC = IERC20(USDC_CONTRACT_ADDRESS).balanceOf(
-            address(this)
-        );
+        uint256 allUSDC = IERC20(USDC_CONTRACT_ADDRESS).balanceOf(address(this));
         IERC20(USDC_CONTRACT_ADDRESS).transfer(msg.sender, allUSDC);
     }
 
     // Withdraw ETH Sent to this contract
     function withdrawEth() external onlyOwner nonReentrant {
-        (bool success, ) = payable(owner()).call{value: address(this).balance}(
-            ""
-        );
+        (bool success,) = payable(owner()).call{value: address(this).balance}("");
         require(success, "Failed to withdraw ETH");
     }
 
     // Withdraw any other ERC20 tokens (apart from USDC) sent to contract accidentally
-    function withdrawErc20(
-        address _tokenAddress
-    ) external onlyOwner nonReentrant {
-        require(
-            _tokenAddress != USDC_CONTRACT_ADDRESS,
-            "Cannot withdraw USDC from this function"
-        );
+    function withdrawErc20(address _tokenAddress) external onlyOwner nonReentrant {
+        require(_tokenAddress != USDC_CONTRACT_ADDRESS, "Cannot withdraw USDC from this function");
         uint256 allTokens = IERC20(_tokenAddress).balanceOf(address(this));
         IERC20(_tokenAddress).transfer(msg.sender, allTokens);
     }
