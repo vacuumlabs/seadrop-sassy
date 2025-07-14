@@ -3,8 +3,6 @@ pragma solidity ^0.8.17;
 
 import {ERC721SeaDrop} from "./ERC721SeaDrop.sol";
 import {SassyShreddersErrorsAndEvents} from "./SassyErrorsAndEvents.sol";
-import {ERC721ContractMetadata} from "./ERC721ContractMetadata.sol";
-import {ISeaDropTokenContractMetadata} from "./interfaces/ISeaDropTokenContractMetadata.sol";
 import {IERC20} from "openzeppelin-contracts/interfaces/IERC20.sol";
 import {ECDSA} from "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
 
@@ -39,11 +37,9 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        if (revealedTokenIdRarityMapping[tokenId] != 0) {
-            return string(abi.encodePacked(REVEALED_NFT_BASE_URI, _toString(revealedTokenIdRarityMapping[tokenId])));
-        } else {
-            return UNREVEALED_NFT_URI;
-        }
+        return (revealedTokenIdRarityMapping[tokenId] != 0)
+            ? string(abi.encodePacked(REVEALED_NFT_BASE_URI, _toString(revealedTokenIdRarityMapping[tokenId])))
+            : UNREVEALED_NFT_URI;
     }
 
     function revealNft(uint256 tokenId, uint8 rarity, bytes calldata signature) public {
@@ -64,11 +60,9 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     }
 
     function verifySignature(uint256 tokenId, uint8 rarity, bytes calldata signature) public view returns (bool) {
-        bytes32 objectHash = keccak256(abi.encodePacked(address(this), block.chainid, tokenId, rarity));
-
-        bytes32 ethSignedObjectHash = ECDSA.toEthSignedMessageHash(objectHash);
-        address signer = ECDSA.recover(ethSignedObjectHash, signature);
-        return signer == RARITY_ASSIGNER_ADDRESS;
+        bytes32 objectHash = keccak256(abi.encodePacked(address(this), block.chainid, tokenId, rarity))
+            .toEthSignedMessageHash();
+        return objectHash.recover(signature) == RARITY_ASSIGNER_ADDRESS;
     }
 
     // The burn fee is 10 USDC regardless of tokenIds count
