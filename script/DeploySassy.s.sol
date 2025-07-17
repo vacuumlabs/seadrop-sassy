@@ -51,5 +51,8 @@ contract DeploySassy is Script {
                 true
             )
         );
+
+        token.setUnrevealedNftUri("ipfs://bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i");
+        token.setRarityAssignerAddress(0x129b916d1F226f8aC03978834688A836C250C736);
     }
 }

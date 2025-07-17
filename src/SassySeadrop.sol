@@ -16,9 +16,6 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     string private UNREVEALED_NFT_URI;
     string private REVEALED_NFT_BASE_URI;
 
-    // Unrevealed NFT URI = https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i
-    // Revealed Base URI = https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafybeig3fy55suqgc6d77melvbhwnqhhtrgzjffnbj7wkce6vlqelxfctu/
-    // Contract URI = https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreiedauzkaleiicy5dq7b5rgifw5xlyae5ig6zjt7h2pzcljo27fb2q
     bool private REVEAL_PHASE_ACTIVE = false;
     address private immutable USDC_CONTRACT_ADDRESS;
 
@@ -110,11 +107,11 @@ contract Sassy is ERC721SeaDrop, SassyShreddersErrorsAndEvents {
     // ================= URI Helpers =================
 
     // Set Base URI for revealed assets
-    function setBaseUri(string memory _newUri) external onlyOwner {
+    function setRevealedNftBaseUri(string memory _newUri) external onlyOwner {
         REVEALED_NFT_BASE_URI = _newUri;
     }
 
-    function getBaseUri() external view returns (string memory) {
+    function getRevealedNftBaseUri() external view returns (string memory) {
         return REVEALED_NFT_BASE_URI;
     }
 
