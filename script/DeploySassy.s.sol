@@ -11,10 +11,17 @@ import {ISeaDropTokenContractMetadata} from "../src/interfaces/ISeaDropTokenCont
 import {PublicDrop} from "../src/lib/SeaDropStructs.sol";
 
 contract DeploySassy is Script {
-    // Addresses that stay common across chains
+    // Common across chains
     address seadrop = 0x00005EA00Ac477B1030CE78506496e8C2dE24bf5;
-    address creator = 0x26faf8AE18d15Ed1CA0563727Ad6D4Aa02fb2F80;
-    address feeRecipient = 0x0000a26b00c1F0DF003000390027140000fAa719;
+
+    // Deployer Private Key
+    uint256 privateKey = vm.envUint("PRIVATE_KEY");
+    address deployer = vm.addr(privateKey);
+    
+    // Address to get creator payouts
+    address creator = vm.envAddress("CREATOR_PAYOUT_ADDRESS");
+    // Address to receive marketplace fee
+    address feeRecipient = vm.envAddress("FEE_RECIPIENT_ADDRESS");
 
     address USDC_CONTRACT_ADDRESS = vm.envAddress("USDC_ADDRESS");
 
@@ -27,12 +34,12 @@ contract DeploySassy is Script {
     uint16 maxTotalMintableByWallet = 3;
 
     function run() external {
-        vm.startBroadcast();
+        vm.startBroadcast(privateKey);
 
         address[] memory allowedSeadrop = new address[](1);
         allowedSeadrop[0] = seadrop;
 
-        Sassy token = new Sassy("Sassy Shredders", "Sassy Shredders", allowedSeadrop, USDC_CONTRACT_ADDRESS);
+        Sassy token = new Sassy("Sassy Shredders", "SASS", allowedSeadrop, USDC_CONTRACT_ADDRESS);
 
         // Configure the token.
         token.setMaxSupply(maxSupply);
@@ -40,19 +47,7 @@ contract DeploySassy is Script {
         // Configure the drop parameters.
         token.updateCreatorPayoutAddress(seadrop, creator);
         token.updateAllowedFeeRecipient(seadrop, feeRecipient, true);
-        token.updatePublicDrop(
-            seadrop,
-            PublicDrop(
-                mintPrice,
-                uint48(block.timestamp), // start time (TODO: Set it to Date of mint)
-                uint48(block.timestamp) + 259200, // end time (3 days)
-                maxTotalMintableByWallet,
-                feeBps,
-                true
-            )
-        );
-
-        token.setUnrevealedNftUri("ipfs://bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i");
+        token.setUnrevealedNftUri("https://jade-perfect-gibbon-918.mypinata.cloud/ipfs/bafkreieltelsnuyjlsirn4aexa4yqudfgtpagrbsjbymqtwzjnpx4jo34i");
         token.setRarityAssignerAddress(0x129b916d1F226f8aC03978834688A836C250C736);
     }
 }
