@@ -86,7 +86,7 @@ contract RevealNftTest is TestHelper {
     function test_RevealFailsIfTokenNotOwned() public {
         vm.startPrank(user1);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
 
         vm.startPrank(user2);
         vm.expectRevert(IERC721A.OwnerQueryForNonexistentToken.selector);
@@ -96,7 +96,7 @@ contract RevealNftTest is TestHelper {
     function test_RevealFailsWhenCallerNotOwner() public {
         vm.startPrank(user1);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
 
         vm.startPrank(user2);
         vm.expectRevert(
@@ -111,7 +111,7 @@ contract RevealNftTest is TestHelper {
     function test_RevealFailsIfInvalidRarityInvalidTokenId() public {
         vm.startPrank(user1);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
 
         vm.expectRevert(IERC721A.OwnerQueryForNonexistentToken.selector);
         nftContract.revealNft(5051, 5, signature);
@@ -123,7 +123,7 @@ contract RevealNftTest is TestHelper {
     function test_RevealFailsIfAlreadyRevealed() public {
         vm.startPrank(user1);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
 
         // Directly storing a rarity in the memory for key 1 = value 1 on slot 19
         // Slots can be found using forge inspect contract-name storage-layout
@@ -137,7 +137,7 @@ contract RevealNftTest is TestHelper {
     function test_RevealSuccessfulForCorrectSignature() public {
         vm.startPrank(user1);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
         vm.assertEq(nftContract.getRarityForTokenId(1), 0);
         nftContract.revealNft(1, 2, signature);
         vm.assertEq(nftContract.getRarityForTokenId(1), 2);
@@ -148,7 +148,7 @@ contract RevealNftTest is TestHelper {
     function test_RevealFailsForSignatureByBadActor() public {
         vm.startPrank(user1);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
 
         bytes32 messageHash = keccak256(abi.encodePacked(address(nftContract), block.chainid, uint256(1), uint8(2)));
         bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
@@ -165,7 +165,7 @@ contract RevealNftTest is TestHelper {
     function test_RevealFailsForSignatureForDifferentTokenOrRarity() public {
         vm.startPrank(user1);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
 
         // Second NFT Owned by owner
         ISeaDrop(seadrop).mintPublic{value: mintPrice}(address(nftContract), feeRecipient, address(0), 1);

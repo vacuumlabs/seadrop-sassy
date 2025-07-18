@@ -86,7 +86,7 @@ contract BurnNftTest is TestHelper {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pkUser1, ethSignedMessageHash);
         signature = abi.encodePacked(r, s, v);
         nftContract.toggleRevealPhaseActive();
-        nftContract.setBaseUri("https://new_base_uri.com/");
+        nftContract.setRevealedNftBaseUri("https://new_base_uri.com/");
         nftContract.revealNft(1, 2, signature);
     }
 
